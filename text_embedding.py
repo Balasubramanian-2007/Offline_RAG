@@ -5,61 +5,107 @@ import docx
 
 #Structure aware chunking : 
 
+def isheading(line):
+    score=0
+    threshold=4
+    if len(line)<=80:score+=1
+    if line.endswith(":"):score+=1
+    if line.isupper():score+=2
+    if len(line.split())<=10:score+=2
+    if not line.endswith("."):score+=1
+    if line.lower().startswith(("the ", "a ", "an ")):score -= 2
+
+    if score>=threshold:
+        return score
+    else:
+        return False
+
+
+# x=isheading("COMPLETE RESEARCH ANALYSIS: Best LLM for Offline Technical  Document Retrieval")
+# print(f"x:{x}")
+# y=isheading("the research actually says:")
+# print(f"y:{y}")
+
+
 def extract_text_from_pdf(file_name):
-    bullet_pattern = re.compile(r"^\s*[\*\-\•\d\.]+\s+")
     reader = PdfReader(file_name)
     words=[]
-    page_no=1
+
+    heading_found=False
+
     for page in reader.pages:
         text=page.extract_text()
         if not text:
             continue
-        lines=text.split('\n')
+
         sections={}
+        lines=text.split('\n')
+
         sections["heading"]=""
         sections["content"]=""
-        sections["page_no"]=page_no
+        sections["document_name"]=file_name
+
+        previousHeadingScore=2
+
         for eachLine in lines:
             cleanLine=eachLine.strip()
-            if not cleanLine:
-                continue
-            if len(cleanLine)<80 and cleanLine.isupper() :
-                sections["heading"]+=" "+cleanLine
-            elif bullet_pattern.match(cleanLine):
-                sections["content"]+=" "+cleanLine
+            check_heading=isheading(cleanLine)
+            if( check_heading and check_heading>previousHeadingScore):
+                if sections["heading"]!="":
+                    sections["content"]+=f"{sections['heading']}"
+
+                sections["heading"]=cleanLine
+                previousHeadingScore=check_heading
             else:
-                sections["content"]+=" "+cleanLine
+                sections["content"]+=f"  {cleanLine}"
+
+        if(len(sections["heading"])<=1):
+            sections["heading"]+="None"
+
         words.append(sections)
-        page_no+=1
-    print(words)
+    #this is for checking the heading identification parameter :
+    # for i in words:
+    #     print("Chunk : ")
+    #     print(i)
+    #     print("\n")
+    #     print("\n")
 
 def extract_text_from_word(file_name):
-    bullet_pattern = re.compile(r"^\s*[\*\-\•\d\.]+\s+")
+    # bullet_pattern = re.compile(r"^\s*[\*\-\•\d\.]+\s+")
     document=docx.Document(file_name)
     words=[]
-    page_number=1
+
     for page in document.paragraphs:
-        # total+=page.text
         if not page.text:
             continue
         lines=page.text.split('\n')
         sections={}
         sections["heading"]=""
         sections["content"]=""
-        sections["page_no"]=page_number
+        sections["document_name"]=file_name
+
+        previousHeadingScore=1
         for eachLine in lines:
             cleanLine=eachLine.strip()
-            if not cleanLine:
-                continue
-            if len(cleanLine)<80 and cleanLine.isupper() :
-                sections["heading"]+=" "+cleanLine
-            elif bullet_pattern.match(cleanLine):
-                sections["content"]+=" "+cleanLine
-            else:
-                sections["content"]+=" "+cleanLine
-        words.append(sections)
-        page_number+=1
-    print(words)
+            check_heading=isheading(cleanLine)
+            if( check_heading and check_heading>previousHeadingScore):
+                if sections["heading"]!="":
+                    sections["content"]+=f"{sections['heading']}"
 
-extract_text_from_word("D:\ACTIMATE.docx")
-extract_text_from_pdf("D:\Downloads\RESEARCH-BACKED LLM Analysis for Offline Technical Document Retrieval - converted.pdf")
+                sections["heading"]=cleanLine
+                previousHeadingScore=check_heading
+            else:
+                sections["content"]+=f"  {cleanLine}"
+
+        if(len(sections["heading"])<=1):
+            sections["heading"]+="None"
+
+        words.append(sections)
+    # for i in words:
+    #     print("Chunk : ")
+    #     print(i)
+    #     print("\n")
+    #     print("\n")
+
+# extract_text_from_word("D:\ACTIMATE.docx")
+# extract_text_from_pdf("D:\Downloads\RESEARCH-BACKED LLM Analysis for Offline Technical Document Retrieval - converted.pdf")
