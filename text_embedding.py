@@ -2,110 +2,228 @@
 from pypdf import PdfReader
 import re
 import docx
+from collections import Counter
 
 #Structure aware chunking : 
-
 def isheading(line):
-    score=0
-    threshold=4
-    if len(line)<=80:score+=1
-    if line.endswith(":"):score+=1
-    if line.isupper():score+=2
-    if len(line.split())<=10:score+=2
-    if not line.endswith("."):score+=1
-    if line.lower().startswith(("the ", "a ", "an ")):score -= 2
+    score = 0
+    threshold = 4
 
-    if score>=threshold:
-        return score
-    else:
+    line = line.strip()
+    if not line:
         return False
 
+    if len(line) <= 80: score += 1
+    if line.endswith(":"): score += 1
+    if line.isupper(): score += 2
+    if len(line.split()) <= 10: score += 2
+    if not line.endswith("."): score += 1
+    if line.lower().startswith(("the ", "a ", "an ","and ")): score -= 2
 
-# x=isheading("COMPLETE RESEARCH ANALYSIS: Best LLM for Offline Technical  Document Retrieval")
-# print(f"x:{x}")
-# y=isheading("the research actually says:")
-# print(f"y:{y}")
-
-
+    return score if score >= threshold else False
+'''
 def extract_text_from_pdf(file_name):
     reader = PdfReader(file_name)
-    words=[]
 
-    heading_found=False
+    sections = []
+    current_section = None
+    previousHeadingScore = 0
 
-    for page in reader.pages:
-        text=page.extract_text()
+    for page_no, page in enumerate(reader.pages, start=1):
+        text = page.extract_text()
         if not text:
             continue
 
-        sections={}
-        lines=text.split('\n')
+        lines = text.split("\n")
 
-        sections["heading"]=""
-        sections["content"]=""
-        sections["document_name"]=file_name
+        for line in lines:
+            cleanLine = line.strip()
+            if not cleanLine:
+                continue
 
-        previousHeadingScore=2
+            heading_score = isheading(cleanLine)
 
-        for eachLine in lines:
-            cleanLine=eachLine.strip()
-            check_heading=isheading(cleanLine)
-            if( check_heading and check_heading>previousHeadingScore):
-                if sections["heading"]!="":
-                    sections["content"]+=f"{sections['heading']}"
+            if heading_score and (heading_score > previousHeadingScore or heading_score < previousHeadingScore):
+                # close previous section
+                if current_section:
+                    sections.append(current_section)
 
-                sections["heading"]=cleanLine
-                previousHeadingScore=check_heading
+                current_section = {
+                    "heading": cleanLine,
+                    "content": "",
+                    "document_name": file_name,
+                    "page_start": page_no,
+                    "page_end": page_no
+                }
+                previousHeadingScore = heading_score
             else:
-                sections["content"]+=f"  {cleanLine}"
+                if not current_section:
+                    current_section = {
+                        "heading": "GENERAL",
+                        "content": "",
+                        "document_name": file_name,
+                        "page_start": page_no,
+                        "page_end": page_no
+                    }
 
-        if(len(sections["heading"])<=1):
-            sections["heading"]+="None"
+                current_section["content"] += " " + cleanLine
+                current_section["page_end"] = page_no
 
-        words.append(sections)
-    #this is for checking the heading identification parameter :
-    # for i in words:
-    #     print("Chunk : ")
-    #     print(i)
-    #     print("\n")
-    #     print("\n")
+    if current_section:
+        sections.append(current_section)
+
+    # return sections
+        for i in sections:
+            print(i)
+            print("\n")
+
+'''
+
+def extract_text_from_pdf(file_name):
+    reader = PdfReader(file_name)
+
+    sections = []
+    current_section = None
+
+    for page_no, page in enumerate(reader.pages, start=1):
+        text = page.extract_text()
+        if not text:
+            continue
+
+        lines = text.split("\n")
+
+        for line in lines:
+            cleanLine = line.strip()
+            if not cleanLine:
+                continue
+
+            heading_score = isheading(cleanLine)
+            if heading_score:
+                if current_section:
+                    sections.append(current_section)
+
+                current_section = {
+                    "heading": cleanLine,
+                    "content": "",
+                    "document_name": file_name,
+                    "page_start": page_no,
+                    "page_end": page_no
+                }
+            else:
+                if not current_section:
+                    current_section = {
+                        "heading": "GENERAL",
+                        "content": "",
+                        "document_name": file_name,
+                        "page_start": page_no,
+                        "page_end": page_no
+                    }
+
+                current_section["content"] += " " + cleanLine
+                current_section["page_end"] = page_no
+
+    if current_section:
+        sections.append(current_section)
+
+    return sections
+
+'''
+def extract_text_from_word(file_name):
+    document = docx.Document(file_name)
+
+    sections = []
+    current_section = None
+    previousHeadingScore = 0
+
+    for para_index, para in enumerate(document.paragraphs):
+        cleanLine = para.text.strip()
+        if not cleanLine:
+            continue
+
+        heading_score = isheading(cleanLine)
+
+        # if heading_score or heading_score > previousHeadingScore:
+        if heading_score :
+            if current_section:
+                sections.append(current_section)
+
+            current_section = {
+                "heading": cleanLine,
+                "content": "",
+                "document_name": file_name,
+                "para_start": para_index,
+                "para_end": para_index
+            }
+            previousHeadingScore = heading_score
+        else:
+            if not current_section:
+                current_section = {
+                    "heading": "GENERAL",
+                    "content": "",
+                    "document_name": file_name,
+                    "para_start": para_index,
+                    "para_end": para_index
+                }
+
+            current_section["content"] += " " + cleanLine
+            current_section["para_end"] = para_index
+
+    if current_section:
+        sections.append(current_section)
+
+    # return sections
+    for i in sections:
+        print(i)
+        print("\n")
+'''
+
 
 def extract_text_from_word(file_name):
-    # bullet_pattern = re.compile(r"^\s*[\*\-\•\d\.]+\s+")
-    document=docx.Document(file_name)
-    words=[]
+    document = docx.Document(file_name)
 
-    for page in document.paragraphs:
-        if not page.text:
+    sections = []
+    current_section = None
+
+    for para_index, para in enumerate(document.paragraphs):
+        cleanLine = para.text.strip()
+        if not cleanLine:
             continue
-        lines=page.text.split('\n')
-        sections={}
-        sections["heading"]=""
-        sections["content"]=""
-        sections["document_name"]=file_name
 
-        previousHeadingScore=1
-        for eachLine in lines:
-            cleanLine=eachLine.strip()
-            check_heading=isheading(cleanLine)
-            if( check_heading and check_heading>previousHeadingScore):
-                if sections["heading"]!="":
-                    sections["content"]+=f"{sections['heading']}"
+        heading_score = isheading(cleanLine)
 
-                sections["heading"]=cleanLine
-                previousHeadingScore=check_heading
-            else:
-                sections["content"]+=f"  {cleanLine}"
+        if heading_score:
+            if current_section:
+                sections.append(current_section)
 
-        if(len(sections["heading"])<=1):
-            sections["heading"]+="None"
+            current_section = {
+                "heading": cleanLine,
+                "content": "",
+                "document_name": file_name,
+                "para_start": para_index,
+                "para_end": para_index
+            }
+        else:
+            if not current_section:
+                current_section = {
+                    "heading": "GENERAL",
+                    "content": "",
+                    "document_name": file_name,
+                    "para_start": para_index,
+                    "para_end": para_index
+                }
 
-        words.append(sections)
-    # for i in words:
-    #     print("Chunk : ")
-    #     print(i)
-    #     print("\n")
-    #     print("\n")
+            current_section["content"] += " " + cleanLine
+            current_section["para_end"] = para_index
 
-# extract_text_from_word("D:\ACTIMATE.docx")
-# extract_text_from_pdf("D:\Downloads\RESEARCH-BACKED LLM Analysis for Offline Technical Document Retrieval - converted.pdf")
+    if current_section:
+        sections.append(current_section)
+
+    return sections
+
+
+# extract_text_from_word("D:\Academics Till Now\\3-rd SEM Academics\CN_Lab\CN_lab1_revised.docx")
+chunks=extract_text_from_pdf("documents\\40_a.pdf")
+for c in chunks:
+    if len(c["content"]) < 50:
+        print(c["heading"], c["content"])
+
