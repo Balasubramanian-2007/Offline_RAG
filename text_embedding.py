@@ -3,6 +3,19 @@ from pypdf import PdfReader
 import re
 import docx
 from collections import Counter
+import psycopg2
+
+
+# DB CONNECTION :
+conn=psycopg2.connect(
+    dbname="OWN_RAG",
+    user="postgres",
+    password="Bala@2007",
+    host="localhost",
+    port="5432"
+)
+
+cur=conn.cursor()
 
 #Structure aware chunking : 
 def isheading(line):
@@ -100,6 +113,13 @@ def extract_text_from_pdf(file_name):
             heading_score = isheading(cleanLine)
             if heading_score:
                 if current_section:
+                    dbQuery="""
+                        INSERT INTO chunks
+                        (source_name,heading,content,pg_start,pg_end)
+                        VALUES(%s,%s,%s,%s,%s)
+                        """
+                    cur.execute(dbQuery,(current_section["document_name"],current_section["heading"],current_section["content"],current_section["page_start"],current_section["page_end"]))
+                    conn.commit()
                     sections.append(current_section)
 
                 current_section = {
@@ -123,6 +143,13 @@ def extract_text_from_pdf(file_name):
                 current_section["page_end"] = page_no
 
     if current_section:
+        dbQuery="""
+        INSERT INTO chunks
+        (source_name,heading,content,pg_start,pg_end)
+        VALUES(%s,%s,%s,%s,%s)
+        """
+        cur.execute(dbQuery,(current_section["document_name"],current_section["heading"],current_section["content"],current_section["page_start"],current_section["page_end"]))
+        conn.commit()
         sections.append(current_section)
 
     return sections
@@ -193,6 +220,13 @@ def extract_text_from_word(file_name):
 
         if heading_score:
             if current_section:
+                dbQuery="""
+                    INSERT INTO chunks
+                    (source_name,heading,content,pg_start,pg_end)
+                    VALUES(%s,%s,%s,%s,%s)
+                    """
+                cur.execute(dbQuery,(current_section["document_name"],current_section["heading"],current_section["content"],current_section["para_start"],current_section["para_end"]))
+                conn.commit()
                 sections.append(current_section)
 
             current_section = {
@@ -216,14 +250,18 @@ def extract_text_from_word(file_name):
             current_section["para_end"] = para_index
 
     if current_section:
+        dbQuery="""
+            INSERT INTO chunks
+            (source_name,heading,content,pg_start,pg_end)
+            VALUES(%s,%s,%s,%s,%s)
+            """
+        cur.execute(dbQuery,(current_section["document_name"],current_section["heading"],current_section["content"],current_section["para_start"],current_section["para_end"],))
+        conn.commit()
         sections.append(current_section)
 
     return sections
 
 
-# extract_text_from_word("D:\Academics Till Now\\3-rd SEM Academics\CN_Lab\CN_lab1_revised.docx")
-chunks=extract_text_from_pdf("documents\\40_a.pdf")
-for c in chunks:
-    if len(c["content"]) < 50:
-        print(c["heading"], c["content"])
+extract_text_from_word("D:\Academics Till Now\\3-rd SEM Academics\CN_Lab\CN_lab1_revised.docx")
+# chunks=extract_text_from_pdf("documents\\40_a.pdf")
 
