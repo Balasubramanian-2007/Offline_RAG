@@ -8,8 +8,17 @@ from sentence_transformers import SentenceTransformer
 import faiss
 from typing import List
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import numpy as np
+import os
+import shutil
 
 
+#SERVER CREATION :
+app=FastAPI()
+
+UPLOAD_DIRECTORY = "./uploads"
+if not os.path.exists(UPLOAD_DIRECTORY):
+    os.makedirs(UPLOAD_DIRECTORY)
 
 #Embedding model:
 '''
@@ -110,7 +119,6 @@ def extract_text_from_pdf(file_name):
 
     return sections
 
-
 def extract_text_from_word(file_name):
     document = docx.Document(file_name)
 
@@ -167,17 +175,33 @@ def extract_text_from_word(file_name):
 
     return sections
 
-def file_uploads(files: List[UploadFile] = File(...)):
-    sentences="I am sudalai muthu !"
-    embeddings = model.encode(sentences)
-    print(embeddings)
-    for file in files:
-        if not file.endswith(".pdf") or not file.endswith(".docx"):
-            raise HTTPException(status_code=404,detail="Invalid File Type ! Upload a valid file PDF or Docx")
-        
+@app.post("/upload")
+def file_uploads(file: UploadFile = File(...)):
+    filename=os.path.basename(file.filename)
+    file_path=os.path.join(UPLOAD_DIRECTORY,filename)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        print(f"Saved {file.filename} to {file_path}")
+    except Exception as e:
+        print(f"Error saving file: {e}")
+    
+    if file.filename.endswith(".pdf"):
+        chunks=extract_text_from_pdf(file_path)
+    elif file.filename.endswith(".docx"):
+        chunks=extract_text_from_word(file_path)
+    else:
+        raise HTTPException(status_code=404,detail="Invalid File Type ! Upload a valid file PDF or Docx")
+    
+    embeddings = model.encode(chunks,normalize_embeddings=True)
+    index=faiss.IndexFlatL2(384)
+    index.add(embeddings)
+
+
+    print(index)
 
 
 # extract_text_from_word("D:\Academics Till Now\\3-rd SEM Academics\CN_Lab\CN_lab1_revised.docx")
 # chunks=extract_text_from_pdf("documents\\40_a.pdf")
 # file_uploads()
-
