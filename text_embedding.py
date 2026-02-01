@@ -11,7 +11,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 import numpy as np
 import os
 import shutil
-
+from pydantic import BaseModel  #used for data parsing and data validation
 
 #SERVER CREATION :
 app=FastAPI()
@@ -19,6 +19,10 @@ app=FastAPI()
 UPLOAD_DIRECTORY = "./uploads"
 if not os.path.exists(UPLOAD_DIRECTORY):
     os.makedirs(UPLOAD_DIRECTORY)
+
+#For string as a parameter in /query
+class QueryRequest(BaseModel):
+    query: str 
 
 #Embedding model:
 '''
@@ -187,6 +191,7 @@ def file_uploads(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error saving file: {e}")
     
+
     if file.filename.endswith(".pdf"):
         chunks=extract_text_from_pdf(file_path)
     elif file.filename.endswith(".docx"):
@@ -195,13 +200,44 @@ def file_uploads(file: UploadFile = File(...)):
         raise HTTPException(status_code=404,detail="Invalid File Type ! Upload a valid file PDF or Docx")
     
     embeddings = model.encode(chunks,normalize_embeddings=True)
-    index=faiss.IndexFlatL2(384)
+    dimension=embeddings.shape[1]
+
+    if os.path.exists("faissx.faiss"):
+        index=faiss.read_index("faissx.faiss")
+    else:
+        index=faiss.IndexFlatL2(dimension)
+
+    base_chunk_id=index.ntotal
     index.add(embeddings)
+    faissFileName="faissx.faiss"
+    faiss.write_index(index,faissFileName)
+    print(f"Updated index saved to {faissFileName}")
+    return{"message":"Vector inserted successfully"}
 
 
-    print(index)
+#Query retrieval :
 
 
-# extract_text_from_word("D:\Academics Till Now\\3-rd SEM Academics\CN_Lab\CN_lab1_revised.docx")
-# chunks=extract_text_from_pdf("documents\\40_a.pdf")
-# file_uploads()
+@app.post("/result")
+def query_retrieval(req: QueryRequest):
+    query=req.query
+    embedding = model.encode(query,normalize_embeddings=True)
+    embedding = np.array(embedding).astype("float32").reshape(1, -1)
+
+    faiss_file="faissx.faiss"
+    if os.path.exists("faissx.faiss"):
+        index=faiss.read_index(faiss_file)
+    else:
+        raise HTTPException(status_code=404,detail="No faiss file !")
+        
+    top_K=10
+    D,I=index.search(embedding,top_K)
+    print("Top K indices chunks :",I)
+
+    chunk_ids = I[0].tolist()
+    
+    return {"Chunk ID":chunk_ids}
+
+
+
+
