@@ -12,6 +12,10 @@ import numpy as np
 import os
 import shutil
 from pydantic import BaseModel  #used for data parsing and data validation
+from ollama import chat
+from ollama import ChatResponse
+
+
 
 #SERVER CREATION :
 app=FastAPI()
@@ -35,7 +39,7 @@ model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 conn=psycopg2.connect(
     dbname="OWN_RAG",
     user="postgres",
-    password="Bala@2007",
+    password="",
     host="localhost",
     port="5432"
 )
@@ -217,6 +221,49 @@ def file_uploads(file: UploadFile = File(...)):
 
 #Query retrieval :
 
+def fetchChunksFromDB(chunk_id):
+    chunk_id=[i+1 for i in chunk_id]
+    query="""
+        SELECT heading,content FROM chunks
+        WHERE chunk_id=ANY(%s) AND deleted_at IS NULL
+    """
+    cur.execute(query,(chunk_id,))
+    chunks=cur.fetchall()
+    if not chunks:
+        message={"Message":"No chunks retrieved ! No relevant information is found!"}
+        return message
+    context=""
+    for heading,content in chunks:
+        context+=f"\n[SECTION:${heading}]\n{content}\n"
+    return context.strip()
+
+def build_prompt(context, user_query):
+    return f"""
+    You are a helpful technical assistant.
+    Answer ONLY using the information provided below.
+    If the answer is not present, say "Not found in the document".
+
+    Context:
+    {context}
+
+    Question:
+    {user_query}
+
+    Answer:
+    """.strip()
+
+def ollama(prompt):
+    response: ChatResponse = chat(
+        model="qwen2:1.5b",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+    return response.message.content
+
 
 @app.post("/result")
 def query_retrieval(req: QueryRequest):
@@ -230,13 +277,17 @@ def query_retrieval(req: QueryRequest):
     else:
         raise HTTPException(status_code=404,detail="No faiss file !")
         
-    top_K=10
+    top_K=6
     D,I=index.search(embedding,top_K)
-    print("Top K indices chunks :",I)
-
     chunk_ids = I[0].tolist()
-    
-    return {"Chunk ID":chunk_ids}
+    context=fetchChunksFromDB(chunk_ids)
+    prompt=build_prompt(context,query)
+    ollamaResponse=ollama(prompt)
+    message={
+        "Question:":query,"Response:":ollamaResponse
+    }
+
+    return message
 
 
 
