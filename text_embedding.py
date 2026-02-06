@@ -14,11 +14,19 @@ import shutil
 from pydantic import BaseModel  #used for data parsing and data validation
 from ollama import chat
 from ollama import ChatResponse
+from openai import OpenAI
 
+#LLM
 
 
 #SERVER CREATION :
 app=FastAPI()
+
+
+client = OpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=""  # Get free at https://console.groq.com
+)
 
 UPLOAD_DIRECTORY = "./uploads"
 if not os.path.exists(UPLOAD_DIRECTORY):
@@ -203,7 +211,11 @@ def file_uploads(file: UploadFile = File(...)):
     else:
         raise HTTPException(status_code=404,detail="Invalid File Type ! Upload a valid file PDF or Docx")
     
-    embeddings = model.encode(chunks,normalize_embeddings=True)
+    texts = [
+        f"{chunk['heading']}. {chunk['content']}"
+        for chunk in chunks
+    ]
+    embeddings = model.encode(texts,normalize_embeddings=True)
     dimension=embeddings.shape[1]
 
     if os.path.exists("faissx.faiss"):
@@ -222,7 +234,9 @@ def file_uploads(file: UploadFile = File(...)):
 #Query retrieval :
 
 def fetchChunksFromDB(chunk_id):
+    print(chunk_id)
     chunk_id=[i+1 for i in chunk_id]
+    print(f"Chunk ID after adding one :\n{chunk_id}")
     query="""
         SELECT heading,content FROM chunks
         WHERE chunk_id=ANY(%s) AND deleted_at IS NULL
@@ -252,18 +266,26 @@ def build_prompt(context, user_query):
     Answer:
     """.strip()
 
-def ollama(prompt):
-    response: ChatResponse = chat(
-        model="qwen2:1.5b",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    )
-    return response.message.content
+# def ollama(prompt):
+#     response: ChatResponse = chat(
+#         model="qwen2:1.5b",
+#         messages=[
+#             {
+#                 "role": "user",
+#                 "content": prompt
+#             }
+#         ]
+#     )
+#     return response.message.content
 
+def ask_llm(prompt):
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",  # or other Groq models
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=400,
+        temperature=0.2
+    )
+    return response.choices[0].message.content
 
 @app.post("/result")
 def query_retrieval(req: QueryRequest):
@@ -277,17 +299,19 @@ def query_retrieval(req: QueryRequest):
     else:
         raise HTTPException(status_code=404,detail="No faiss file !")
         
-    top_K=6
+    top_K=12
     D,I=index.search(embedding,top_K)
     chunk_ids = I[0].tolist()
     context=fetchChunksFromDB(chunk_ids)
     prompt=build_prompt(context,query)
-    ollamaResponse=ollama(prompt)
+    # ollamaResponse=ollama(prompt)
+    geminiResponse=ask_llm(prompt)
     message={
-        "Question:":query,"Response:":ollamaResponse
+        "Question:":query,"Response:":geminiResponse
     }
 
     return message
+    
 
 
 
