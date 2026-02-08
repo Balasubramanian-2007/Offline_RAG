@@ -266,7 +266,7 @@ def build_prompt(context, user_query):
     Answer:
     """.strip()
 
-# def ollama(prompt):
+# def ask_llm(prompt):
 #     response: ChatResponse = chat(
 #         model="qwen2:1.5b",
 #         messages=[
@@ -305,13 +305,24 @@ def query_retrieval(req: QueryRequest):
     context=fetchChunksFromDB(chunk_ids)
     prompt=build_prompt(context,query)
     # ollamaResponse=ollama(prompt)
-    geminiResponse=ask_llm(prompt)
+    LLMResponse=ask_llm(prompt)
     message={
-        "Question:":query,"Response:":geminiResponse
+        "Question:":query,"Response:":LLMResponse
     }
 
     return message
-    
+
+
+@app.get("/deleteDocuments")
+def deleteDocuments(req:QueryRequest):
+    docToDelete=req.query
+    query="""
+        UPDATE chunks SET deleted_at=LOCALTIMESTAMP WHERE source_name=%s
+    """
+    cur.execute(query,(docToDelete,))
+    conn.commit()
+
+
 
 
 
