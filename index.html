@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>RAG Document Assistant</h1>
+            <p>Upload documents and ask questions powered by AI</p>
+        </header>
+
+        <section class="upload-section">
+            <h2>Upload Document</h2>
+            <form id="uploadForm">
+                <input type="file" id="fileInput" accept=".pdf,.docx" required>
+                <button type="submit" class="btn-primary">Upload</button>
+            </form>
+            <div id="uploadStatus"></div>
+        </section>
+
+        <section class="query-section">
+            <h2>Ask a Question</h2>
+            <form id="queryForm">
+                <textarea id="queryInput" placeholder="Enter your question here..." required></textarea>
+                <button type="submit" class="btn-secondary">Ask</button>
+            </form>
+            <div id="queryResult"></div>
+        </section>
+
+        <section class="documents-section">
+            <h2>Uploaded Documents</h2>
+            <div id="documentsList"></div>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
