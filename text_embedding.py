@@ -15,6 +15,7 @@ from pydantic import BaseModel  #used for data parsing and data validation
 from ollama import chat
 from ollama import ChatResponse
 from openai import OpenAI
+from fastapi.middleware.cors import CORSMiddleware
 
 #LLM
 
@@ -22,11 +23,20 @@ from openai import OpenAI
 #SERVER CREATION :
 app=FastAPI()
 
-
-client = OpenAI(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=""  # Get free at https://console.groq.com
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
+
+
+# client = OpenAI(
+#     base_url="https://api.groq.com/openai/v1",
+#     api_key=""  # Get free at https://console.groq.com
+# )
 
 UPLOAD_DIRECTORY = "./uploads"
 if not os.path.exists(UPLOAD_DIRECTORY):
@@ -41,7 +51,8 @@ class QueryRequest(BaseModel):
 URL for hugging face sentence transformers =
 https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
 '''
-model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+# model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+model=SentenceTransformer("C:\\Users\\ADMIN\\.cache\\huggingface\\hub\\models--sentence-transformers--all-MiniLM-L6-v2\\snapshots\\c9745ed1d9f207416be6d2e6f8de32d1f16199bf",local_files_only=True)
 
 # DB CONNECTION :
 conn=psycopg2.connect(
@@ -266,26 +277,26 @@ def build_prompt(context, user_query):
     Answer:
     """.strip()
 
-# def ask_llm(prompt):
-#     response: ChatResponse = chat(
-#         model="qwen2:1.5b",
-#         messages=[
-#             {
-#                 "role": "user",
-#                 "content": prompt
-#             }
-#         ]
-#     )
-#     return response.message.content
-
 def ask_llm(prompt):
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",  # or other Groq models
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=400,
-        temperature=0.2
+    response: ChatResponse = chat(
+        model="qwen2:1.5b",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
     )
-    return response.choices[0].message.content
+    return response.message.content
+
+# def ask_llm(prompt):
+#     response = client.chat.completions.create(
+#         model="llama-3.3-70b-versatile",  # or other Groq models
+#         messages=[{"role": "user", "content": prompt}],
+#         max_tokens=400,
+#         temperature=0.2
+#     )
+#     return response.choices[0].message.content
 
 @app.post("/result")
 def query_retrieval(req: QueryRequest):
@@ -313,6 +324,17 @@ def query_retrieval(req: QueryRequest):
     return message
 
 
+@app.get("/documents")
+def get_documents():
+    query = """
+        SELECT DISTINCT source_name FROM chunks
+        WHERE deleted_at IS NULL
+    """
+    cur.execute(query)
+    documents = cur.fetchall()
+    return {"documents": [doc[0] for doc in documents]}
+
+
 @app.get("/deleteDocuments")
 def deleteDocuments(req:QueryRequest):
     docToDelete=req.query
@@ -322,6 +344,9 @@ def deleteDocuments(req:QueryRequest):
     cur.execute(query,(docToDelete,))
     conn.commit()
 
+@app.get("/")
+def welcome():
+    return "Welcome to our site . It is a completely working offline model !"
 
 
 
